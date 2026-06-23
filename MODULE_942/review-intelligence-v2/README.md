@@ -13,9 +13,84 @@
 
 ---
 
+## 🧠 What Is This Project?
+
+The **AI Multi Marketplace Review Intelligence System** is an AI-powered application that automatically collects customer reviews from e-commerce marketplaces and turns them into actionable business insights using a local large language model (LLM).
+
+Instead of a seller manually reading hundreds of reviews across multiple platforms, this system does it in seconds — fetching live reviews, analyzing them with AI, and presenting clear, structured insights in a web dashboard.
+
+This project combines several advanced AI and software engineering concepts:
+
+- **RAG (Retrieval Augmented Generation)** — the AI doesn't guess. It reads actual customer reviews before generating insights.
+- **Semantic Search** — finds reviews by meaning, not just keywords. Searching "battery problems" also finds reviews that say "died after 2 days."
+- **Local LLM** — runs entirely on your own computer using Ollama. No internet connection needed for AI. No API costs. No data privacy concerns.
+- **Live Data Scraping** — fetches real, current reviews directly from marketplaces via APIs.
+
+---
+
+## 🎯 Who Is This For?
+
+| User | How They Use It |
+|------|----------------|
+| **E-commerce sellers** | Understand what customers love and hate about their products without reading 500 reviews manually |
+| **Brand managers** | Monitor product reputation across Walmart, Etsy, and Amazon in one place |
+| **Product managers** | Get AI-generated improvement recommendations based on real customer feedback |
+| **Market researchers** | Quickly analyze competitor products and identify market gaps |
+| **Entrepreneurs** | Validate product ideas by analyzing what customers wish existed |
+
+---
+
+## 💡 Why Does This Exist?
+
+E-commerce sellers face a real problem:
+
+**Before this app:**
+```
+❌ Read 500+ reviews one by one — takes days
+❌ Reviews spread across multiple platforms — no unified view
+❌ Hard to spot patterns — easy to miss recurring issues
+❌ Amazon/Walmart built-in summaries are shallow — designed for shoppers, not sellers
+❌ No tool tells you WHY problems happen or WHAT to improve
+```
+
+**After this app:**
+```
+✅ Paste a product URL
+✅ Get AI analysis in 60 seconds
+✅ Know the top 5 complaints with real examples
+✅ Know the top 5 praises customers love
+✅ Get 5 specific product improvement suggestions
+✅ Understand root causes — not just surface complaints
+✅ Ask any question and get an answer based on real reviews
+```
+
+**Real example:** A Walmart seller sees that 30% of negative reviews mention "packaging issues." Without this app, they'd need to read hundreds of reviews to spot this pattern. With this app, it takes one click — and the AI also explains that the root cause is "insufficient bubble wrap for glass containers during shipping."
+
+That insight directly leads to a business decision that reduces returns and increases sales.
+
+---
+
+## 🆚 How Is This Different From Walmart/Amazon's Built-In Reviews?
+
+| Feature | Walmart/Amazon Website | This App |
+|---------|----------------------|----------|
+| See individual reviews | ✅ | ✅ |
+| Analyze 100+ reviews at once | ❌ | ✅ |
+| Top 5 complaints summary | ❌ | ✅ |
+| Top 5 praises summary | ❌ | ✅ |
+| Root cause analysis | ❌ | ✅ |
+| Product improvement suggestions | ❌ | ✅ |
+| Ask custom questions | ❌ | ✅ |
+| Works across multiple platforms | ❌ | ✅ |
+| Runs locally — no data sent to cloud | ❌ | ✅ |
+
+Walmart and Amazon show you **raw data**. This app gives you **actionable intelligence.**
+
+---
+
 ## 📌 What It Does
 
-Paste any product URL from a supported marketplace and instantly get AI-powered insights about customer reviews — in seconds, not days.
+Paste any product URL from a supported marketplace and instantly get AI-powered insights about customer reviews.
 
 ```
 User pastes URL → Live reviews fetched → AI analyzes → Insights displayed
@@ -25,12 +100,12 @@ User pastes URL → Live reviews fetched → AI analyzes → Insights displayed
 
 | Tab | What You Get |
 |-----|-------------|
-| 📋 Summary | 3-paragraph sentiment overview |
-| 😤 Complaints | Top 5 most common customer issues |
-| 👍 Praises | Top 5 things customers love |
-| 💡 Recommendations | 5 actionable product improvements |
-| 🔍 Root Cause | Why problems really happen |
-| ❓ Custom Q&A | Ask anything about the reviews |
+| 📋 Summary | 3-paragraph sentiment overview of all reviews |
+| 😤 Complaints | Top 5 most common customer issues with examples |
+| 👍 Praises | Top 5 things customers love about the product |
+| 💡 Recommendations | 5 specific product improvement suggestions |
+| 🔍 Root Cause | Deep analysis of WHY problems happen |
+| ❓ Custom Q&A | Ask anything — "Does it have SPF?" "Is packaging good?" |
 
 ---
 
@@ -45,7 +120,7 @@ User pastes URL → Live reviews fetched → AI analyzes → Insights displayed
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ How It Works (Architecture)
 
 ```
 User (Browser — http://localhost:8501)
@@ -59,7 +134,7 @@ User (Browser — http://localhost:8501)
                ▼
     ┌─────────────────────┐
     │   FastAPI Backend    │  backend/main.py
-    │  localhost:8000      │
+    │   localhost:8000     │
     └──────────┬──────────┘
                │
        ┌───────┴────────┐
@@ -78,18 +153,29 @@ User (Browser — http://localhost:8501)
                         ▼
               vector_store.py
               (ChromaDB on disk)
+                   Semantic Search
                         │
                         ▼
                    llm.py
               RAG prompt builder
+              (retrieves relevant reviews)
                         │
                         ▼
             Ollama — Mistral 7B
               localhost:11434
+              (local AI — no internet)
                         │
                         ▼
            AI Insights → Dashboard
 ```
+
+**The RAG Pipeline explained simply:**
+1. User clicks "Generate Complaints"
+2. App searches ChromaDB for reviews about "problems issues broken disappointed"
+3. Top 15 most relevant reviews are retrieved
+4. Those reviews + a structured prompt are sent to Mistral
+5. Mistral reads the actual reviews and generates specific, accurate insights
+6. Result shown in the dashboard
 
 ---
 
@@ -100,12 +186,12 @@ User (Browser — http://localhost:8501)
 | Language | Python 3.11 | Core language |
 | UI | Streamlit | Web dashboard |
 | Backend | FastAPI + Uvicorn | REST API |
-| LLM | Ollama (Mistral 7B) | Local AI inference |
-| Embeddings | SentenceTransformers (MiniLM) | Text → vectors |
-| Vector DB | ChromaDB | Semantic search |
-| HTTP | httpx | API calls |
-| Package Manager | UV | Dependency management |
-| Review APIs | RapidAPI + Etsy Open API | Live review data |
+| LLM | Ollama (Mistral 7B) | Local AI inference — no cloud needed |
+| Embeddings | SentenceTransformers (all-MiniLM-L6-v2) | Text → 384-dim vectors |
+| Vector DB | ChromaDB | Semantic search + persistent storage |
+| HTTP client | httpx | API calls to RapidAPI and Etsy |
+| Package Manager | UV | Fast Python dependency management |
+| Review APIs | RapidAPI + Etsy Open API | Live review data from marketplaces |
 
 > **100% free and open source. No paid APIs. Runs entirely on your local machine.**
 
@@ -167,11 +253,11 @@ uv run python -m spacy download en_core_web_sm
 
 ---
 
-### 5. Install and Set Up Ollama
+### 5. Install Ollama and Pull Mistral
 
 1. Download from **https://ollama.com**
-2. Install it
-3. Pull the Mistral model:
+2. Install it like a normal app
+3. Pull the Mistral model (~4GB):
 
 ```powershell
 ollama pull mistral
@@ -183,8 +269,8 @@ ollama pull mistral
 
 1. Sign up free at **https://rapidapi.com**
 2. Search for **"Real-Time Walmart Data"** by OpenWeb Ninja
-3. Subscribe to the **BASIC (free)** plan
-4. Copy your API key
+3. Subscribe to the **BASIC ($0.00/month)** plan
+4. Copy your API key from the dashboard
 
 ---
 
@@ -201,7 +287,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 CHROMA_DIR=./data/chroma_db
 ```
 
-> ⚠️ Never commit your `.env` file to GitHub. It's already in `.gitignore`.
+> ⚠️ Never commit your `.env` file to GitHub. It is already in `.gitignore`.
 
 ---
 
@@ -233,23 +319,18 @@ http://localhost:8501
 ## 📖 How to Use
 
 1. Open `http://localhost:8501` in your browser
-2. Paste a supported product URL in the input box
-3. Adjust the review count using the sidebar slider
+2. Paste a Walmart product URL in the input box
+3. Adjust the review count using the sidebar slider (20–200)
 4. Click **"🚀 Fetch & Analyze Reviews"**
-5. Wait ~30-60 seconds for reviews to be fetched and embedded
+5. Wait ~30-60 seconds for reviews to be fetched and processed
 6. Click any insight tab and hit **"Generate"**
 7. Use **Step 3: Ask Your Own Question** for custom queries
 
 ### Example URLs to Test
 
-**Walmart:**
+**Walmart (working now):**
 ```
 https://www.walmart.com/ip/Neutrogena-Hydro-Boost-Water-Gel-Face-Moisturizer-Lotion-with-Hyaluronic-Acid-1-7-oz/40488263
-```
-
-**Etsy (coming soon):**
-```
-https://www.etsy.com/listing/1797455914/gold-plated-enamel-sakura-flower
 ```
 
 ---
@@ -289,15 +370,15 @@ review-intelligence-v2/
 
 ---
 
-## 🌐 API Endpoints
+## 🌐 API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `http://localhost:8000/health` | Check API is running |
-| GET | `http://localhost:8000/docs` | Swagger UI — test endpoints |
-| POST | `http://localhost:8000/api/reviews/scrape` | Fetch live reviews from URL |
-| POST | `http://localhost:8000/api/insights/generate` | Generate AI insight |
-| GET | `http://localhost:8000/api/reviews/status` | Check if reviews are loaded |
+| GET | `/health` | Check API is running |
+| GET | `/docs` | Swagger UI — test all endpoints |
+| POST | `/api/reviews/scrape` | Fetch live reviews from product URL |
+| POST | `/api/insights/generate` | Generate AI insight |
+| GET | `/api/reviews/status` | Check if reviews are loaded |
 
 ---
 
@@ -305,25 +386,32 @@ review-intelligence-v2/
 
 - Ollama must be installed locally (auto-starts on Windows)
 - First load takes 60-90 seconds to embed all reviews
-- Walmart products need at least some written reviews (not just star ratings)
+- Walmart products need written reviews (not just star ratings)
 - Free RapidAPI tier has monthly request limits
-- Etsy scraper pending API approval
+- Etsy scraper pending API approval from Etsy
 - Amazon scraper not yet built
 
 ---
 
 ## 🗺️ Version History
 
-### Version 1 (Capstone Submission)
-- CSV dataset → ChromaDB → Ollama → Streamlit
+### Version 1 (Capstone Submission ✅)
+Built during the Per Scholas CAP 942 capstone:
+- Amazon Fine Food Reviews CSV dataset
+- NLP cleaning pipeline
+- SentenceTransformers embeddings
+- ChromaDB vector store
+- Ollama + Mistral RAG pipeline
 - All 5 insight tabs working
 - Custom Q&A
 
-### Version 2 (Current)
+### Version 2 (Current 🔨)
+Post-capstone development:
 - Live review scraping via RapidAPI + Official APIs
-- FastAPI backend separating UI from logic
-- Walmart scraper working end-to-end
+- FastAPI backend separating UI from business logic
+- Walmart scraper fully working end-to-end
 - Etsy and Amazon scrapers in development
+- URL-based product input instead of CSV upload
 
 ---
 
@@ -332,9 +420,10 @@ review-intelligence-v2/
 - [ ] Etsy scraper (Official API — pending approval)
 - [ ] Amazon scraper via RapidAPI
 - [ ] eBay scraper
-- [ ] Competitor comparison across platforms
+- [ ] Side-by-side competitor product comparison
 - [ ] Export insights to PDF report
-- [ ] Sentiment trend over time
+- [ ] Sentiment trend chart over time
+- [ ] Support multiple products simultaneously
 - [ ] Cloud deployment (Render / Railway)
 
 ---
