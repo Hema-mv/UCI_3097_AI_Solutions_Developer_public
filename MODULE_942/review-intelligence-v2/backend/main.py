@@ -11,10 +11,7 @@ from scrapers.walmart import scrape_walmart
 from services.vector_store import store_reviews, search_reviews, collection_exists
 from services.llm import generate_insight, ask_ollama
 
-app = FastAPI(
-    title="Review Intelligence V2 API",
-    version="2.0.0"
-)
+app = FastAPI(title="Review Intelligence V2 API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Pydantic Models ───────────────────────────────────────
 class ScrapeRequest(BaseModel):
     url: str
     max_reviews: int = 100
@@ -31,7 +27,7 @@ class ScrapeRequest(BaseModel):
 class InsightRequest(BaseModel):
     insight_type: str
 
-# ── Routes ────────────────────────────────────────────────
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "version": "2.0.0"}
@@ -40,22 +36,25 @@ def health_check():
 @app.post("/api/reviews/scrape")
 def scrape_reviews(request: ScrapeRequest):
     try:
-        # Detect platform
         platform = detect_platform(request.url)
+        product_info = {}
 
-        # Route to correct scraper
         if platform == "walmart":
-            reviews = scrape_walmart(request.url, request.max_reviews)
+            reviews, product_info = scrape_walmart(request.url, request.max_reviews)
+        elif platform == "amazon":
+            from scrapers.amazon import scrape_amazon
+            reviews, product_info = scrape_amazon(request.url, request.max_reviews)
+        elif platform == "etsy":
+            from scrapers.etsy import scrape_etsy
+            reviews, product_info = scrape_etsy(request.url, request.max_reviews)
         else:
-            return {"status": "error", "message": f"Platform '{platform}' not supported yet. Coming soon!"}
+            return {"status": "error", "message": f"Platform '{platform}' coming soon!"}
 
         if not reviews:
             return {"status": "error", "message": "No reviews found for this product."}
 
-        # Store in ChromaDB
         store_reviews(reviews)
 
-        # Calculate stats
         avg_rating = sum(r["rating"] for r in reviews) / len(reviews)
         high_rated = sum(1 for r in reviews if r["rating"] >= 4)
 
@@ -65,6 +64,10 @@ def scrape_reviews(request: ScrapeRequest):
             "review_count": len(reviews),
             "avg_rating": round(avg_rating, 2),
             "high_rated_pct": round(high_rated / len(reviews) * 100),
+            "product_name": product_info.get("product_name", ""),
+            "product_image": product_info.get("product_image", ""),
+            "product_price": product_info.get("product_price", ""),
+            "store_name": product_info.get("store_name", ""),
         }
 
     except ValueError as e:

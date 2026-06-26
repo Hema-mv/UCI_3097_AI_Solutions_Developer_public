@@ -1,126 +1,158 @@
-import time
-from playwright.sync_api import sync_playwright
+import httpx
+import os
+import urllib.parse
+from dotenv import load_dotenv
 
-def scrape_etsy(url: str, max_reviews: int = 100) -> list[dict]:
-    """
-    Scrape Etsy reviews using Playwright.
-    Etsy loads reviews dynamically so we need a real browser.
-    """
-    listing_id = extract_etsy_id(url)
-    print(f"Etsy listing ID: {listing_id}")
+load_dotenv()
 
-    reviews = []
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 800}
-        )
-        page = context.new_page()
-
-        print("Opening Etsy page...")
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(3000)
-
-        # Close any popups
-        try:
-            page.click("button[data-gdpr-single-choice-accept]", timeout=3000)
-            print("Closed GDPR popup")
-        except:
-            pass
-
-        try:
-            page.click("button[aria-label='Close']", timeout=3000)
-            print("Closed popup")
-        except:
-            pass
-
-        # Scroll to reviews section
-        print("Scrolling to reviews...")
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.6)")
-        page.wait_for_timeout(2000)
-
-        # Look for reviews section
-        page_num = 1
-        while len(reviews) < max_reviews:
-            print(f"Scraping page {page_num}...")
-
-            # Wait for reviews to load
-            page.wait_for_timeout(2000)
-
-            # Extract reviews from current page
-            review_elements = page.query_selector_all("[data-reviews-list] li")
-
-            if not review_elements:
-                # Try alternative selector
-                review_elements = page.query_selector_all(".wt-grid__item-xs-12 .wt-text-body-01")
-
-            if not review_elements:
-                review_elements = page.query_selector_all("[class*='review']")
-
-            print(f"Found {len(review_elements)} review elements")
-
-            for element in review_elements:
-                try:
-                    # Get review text
-                    body = element.inner_text().strip()
-
-                    # Get rating
-                    rating_el = element.query_selector("[aria-label*='star']")
-                    if rating_el:
-                        aria = rating_el.get_attribute("aria-label") or "5"
-                        rating = float(''.join(filter(str.isdigit, aria.split()[0])) or "5")
-                    else:
-                        rating = 5.0
-
-                    if len(body) > 20:
-                        reviews.append({
-                            "platform": "etsy",
-                            "rating": rating,
-                            "title": "",
-                            "body": body,
-                            "full_text": body,
-                        })
-                except:
-                    continue
-
-            # Try to go to next page
-            try:
-                next_btn = page.query_selector("a[aria-label='Go to next page']") or \
-                           page.query_selector("a[rel='next']") or \
-                           page.query_selector("button[aria-label='Next page']")
-
-                if next_btn and len(reviews) < max_reviews:
-                    next_btn.click()
-                    page.wait_for_timeout(3000)
-                    page_num += 1
-                else:
-                    print("No more pages")
-                    break
-            except:
-                print("Could not find next page button")
-                break
-
-        browser.close()
-
-    # Remove duplicates
-    seen = set()
-    unique_reviews = []
-    for r in reviews:
-        if r["body"] not in seen and len(r["body"]) > 20:
-            seen.add(r["body"])
-            unique_reviews.append(r)
-
-    print(f"Total unique reviews: {len(unique_reviews)}")
-    return unique_reviews[:max_reviews]
+HEADERS = {
+    "Content-Type": "application/json",
+    "x-rapidapi-host": "real-time-product-search.p.rapidapi.com",
+    "x-rapidapi-key": RAPIDAPI_KEY,
+}
 
 
 def extract_etsy_id(url: str) -> str:
     """Extract listing ID from Etsy URL."""
-    # Etsy URLs: https://www.etsy.com/listing/1654494480/product-name
     parts = url.split("/listing/")
     if len(parts) > 1:
-        listing_id = parts[1].split("/")[0]
-        return listing_id
+        return parts[1].split("/")[0].split("?")[0]
     raise ValueError("Could not find Etsy listing ID in URL")
+
+
+def fetch_reviews(product_id: str, limit: int = 100) -> list[dict]:
+    """Fetch reviews with pagination."""
+    all_reviews = []
+    page = 1
+    reviews_per_page = 10
+
+    while len(all_reviews) < limit:
+        params = {
+            "product_id": product_id,
+            "limit": str(reviews_per_page),
+            "sort_by": "MOST_RELEVANT",
+            "country": "us",
+            "language": "en",
+            "page": str(page)
+        }
+
+        response = httpx.get(
+            "https://real-time-product-search.p.rapidapi.com/product-reviews",
+            headers=HEADERS,
+            params=params,
+            timeout=60.0
+        )
+
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}")
+            break
+
+        data = response.json()
+        page_reviews = data.get("data", {}).get("reviews", [])
+
+        if not page_reviews:
+            print(f"No more reviews at page {page}")
+            break
+
+        all_reviews.extend(page_reviews)
+        print(f"Page {page}: got {len(page_reviews)} (total: {len(all_reviews)})")
+
+        if len(page_reviews) < reviews_per_page:
+            break
+
+        page += 1
+
+    return all_reviews[:limit]
+
+
+def scrape_etsy(url: str, max_reviews: int = 100) -> tuple:
+    """
+    Fetch Etsy reviews and product info.
+    Returns (reviews, product_info)
+    """
+    try:
+        listing_id = extract_etsy_id(url)
+        print(f"Etsy listing ID: {listing_id}")
+
+        # Extract product name from URL
+        path = urllib.parse.urlparse(url).path
+        parts = path.strip("/").split("/")
+        product_name = ""
+        for part in parts:
+            if part != "listing" and not part.isdigit() and len(part) > 5:
+                product_name = part.replace("-", " ")
+                break
+
+        print(f"Product name: {product_name}")
+
+        # Search for product
+        query = f"{product_name} etsy" if product_name else f"etsy {listing_id}"
+        params = {
+            "q": query,
+            "country": "us",
+            "language": "en",
+            "limit": "10"
+        }
+
+        response = httpx.get(
+            "https://real-time-product-search.p.rapidapi.com/search",
+            headers=HEADERS,
+            params=params,
+            timeout=60.0
+        )
+
+        data = response.json()
+        products = data.get("data", {}).get("products", [])
+
+        # Find Etsy product with most reviews
+        etsy_products = [
+            p for p in products
+            if "etsy" in p.get("store_name", "").lower()
+        ]
+
+        if not etsy_products:
+            raise Exception("No Etsy products found")
+
+        etsy_products.sort(
+            key=lambda x: x.get("product_num_reviews") or 0,
+            reverse=True
+        )
+
+        best = etsy_products[0]
+        photos = best.get("product_photos", [])
+        product_id = best.get("product_id", "")
+        product_info = {
+            "product_name": best.get("product_title", ""),
+            "product_image": photos[0] if photos else "",
+            "product_price": best.get("price", ""),
+            "product_rating": best.get("product_rating", ""),
+            "store_name": best.get("store_name", ""),
+        }
+        print(f"Found: {product_info['product_name'][:60]}")
+
+        # Fetch reviews
+        raw_reviews = fetch_reviews(product_id, limit=max_reviews)
+
+        reviews = []
+        for r in raw_reviews:
+            body   = r.get("review_text", "") or ""
+            title  = r.get("review_title", "") or ""
+            rating = r.get("rating", 3) or 3
+
+            if body and len(body) > 10:
+                reviews.append({
+                    "platform": "etsy",
+                    "rating": float(rating),
+                    "title": str(title),
+                    "body": str(body),
+                    "full_text": f"{title}. {body}".strip(),
+                })
+
+        print(f"Total Etsy reviews: {len(reviews)}")
+        return reviews, product_info
+
+    except Exception as e:
+        print(f"❌ Etsy error: {e}")
+        return [], {}

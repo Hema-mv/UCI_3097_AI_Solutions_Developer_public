@@ -1,16 +1,37 @@
 import httpx
+import os
+from dotenv import load_dotenv
 
-# Try old key first
-ETSY_API_KEY = "mci82rm3fue6d6qal9m34ssi"
+load_dotenv()
 
-listing_id = "1797455914"
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+
+headers = {
+    "Content-Type": "application/json",
+    "x-rapidapi-host": "real-time-product-search.p.rapidapi.com",
+    "x-rapidapi-key": RAPIDAPI_KEY,
+}
+
+params = {
+    "q": "linen shower curtain etsy handmade",
+    "country": "us",
+    "language": "en",
+    "limit": "3"
+}
 
 response = httpx.get(
-    f"https://openapi.etsy.com/v3/application/listings/{listing_id}/reviews",
-    headers={"x-api-key": ETSY_API_KEY},
-    params={"limit": 10, "offset": 0},
-    timeout=30.0
+    "https://real-time-product-search.p.rapidapi.com/search",
+    headers=headers,
+    params=params,
+    timeout=60.0
 )
 
-print(f"Status: {response.status_code}")
-print(f"Response: {response.text[:1000]}")
+data = response.json()
+products = data.get("data", {}).get("products", [])
+
+for p in products:
+    print(f"\nTitle:  {p.get('product_title', '')[:60]}")
+    print(f"Store:  {p.get('store_name', '')}")
+    print(f"Price:  {p.get('price', '')}")
+    print(f"Rating: {p.get('product_rating', '')}")
+    print(f"Photos: {p.get('product_photos', [])}")

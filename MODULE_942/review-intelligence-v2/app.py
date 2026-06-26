@@ -8,13 +8,13 @@ load_dotenv()
 API_BASE = "http://localhost:8000"
 
 st.set_page_config(
-    page_title="Review Intelligence V2",
+    page_title="Review Intelligence System",
     page_icon="🔍",
     layout="wide"
 )
 
-st.title("🔍 AI Review Intelligence System V2")
-st.caption("Paste any Walmart product URL and get AI-powered insights instantly.")
+st.title("🔍 AI Review Intelligence System")
+st.caption("Paste any product URL and get AI-powered insights instantly.")
 
 # ── Sidebar ───────────────────────────────────────────────
 with st.sidebar:
@@ -28,7 +28,7 @@ with st.sidebar:
     )
     st.divider()
     st.markdown("**Supported Platforms**")
-    st.markdown("✅ Walmart\n🔜 Etsy\n🔜 Amazon")
+    st.markdown("✅ Walmart\n✅ Amazon\n✅ Etsy")
     st.divider()
     st.markdown("**How it works**")
     st.markdown("""
@@ -43,11 +43,11 @@ st.header("📋 Step 1: Paste a Product URL")
 
 url = st.text_input(
     "Product URL",
-    placeholder="https://www.walmart.com/ip/product-name/123456789"
+    placeholder="https://www.walmart.com/ip/... or amazon.com/dp/... or etsy.com/listing/..."
 )
 
 if st.button("🚀 Fetch & Analyze Reviews", type="primary") and url:
-    with st.spinner("Fetching reviews from Walmart... this may take 30-60 seconds."):
+    with st.spinner("Fetching reviews... this may take 30-60 seconds."):
         try:
             response = httpx.post(
                 f"{API_BASE}/api/reviews/scrape",
@@ -59,11 +59,23 @@ if st.button("🚀 Fetch & Analyze Reviews", type="primary") and url:
             if data["status"] == "success":
                 st.session_state["reviews_loaded"] = True
                 st.session_state["platform"] = data["platform"]
-                st.session_state["review_count"] = data["review_count"]
-                st.session_state["avg_rating"] = data["avg_rating"]
 
                 st.success(f"✅ Fetched {data['review_count']} reviews from {data['platform'].title()}!")
 
+                # Product info + image
+                col_img, col_info = st.columns([1, 3])
+                with col_img:
+                    if data.get("product_image"):
+                        st.image(data["product_image"], width=200)
+                with col_info:
+                    if data.get("product_name"):
+                        st.subheader(data["product_name"])
+                    if data.get("product_price"):
+                        st.markdown(f"**Price:** {data['product_price']}")
+                    if data.get("store_name"):
+                        st.markdown(f"**Store:** {data['store_name']}")
+
+                # Metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Reviews Fetched", data["review_count"])
