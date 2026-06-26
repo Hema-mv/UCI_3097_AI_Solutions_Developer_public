@@ -19,14 +19,6 @@ The **AI Multi Marketplace Review Intelligence System** is an AI-powered applica
 
 Instead of a seller manually reading hundreds of reviews across multiple platforms, this system does it in seconds — fetching live reviews, analyzing them with AI, and presenting clear, structured insights in a web dashboard — **complete with product images, pricing, and store information.**
 
-This project combines several advanced AI and software engineering concepts:
-
-- **RAG (Retrieval Augmented Generation)** — the AI doesn't guess. It reads actual customer reviews before generating insights.
-- **Semantic Search** — finds reviews by meaning, not just keywords. Searching "battery problems" also finds reviews that say "died after 2 days."
-- **Local LLM** — runs entirely on your own computer using Ollama. No internet connection needed for AI. No API costs. No data privacy concerns.
-- **Live Data Scraping** — fetches real, current reviews directly from marketplaces via APIs.
-- **Product Image Display** — shows the actual product photo alongside insights.
-
 ---
 
 ## 🎯 Who Is This For?
@@ -42,8 +34,6 @@ This project combines several advanced AI and software engineering concepts:
 ---
 
 ## 💡 Why Does This Exist?
-
-E-commerce sellers face a real problem:
 
 **Before this app:**
 ```
@@ -85,7 +75,108 @@ E-commerce sellers face a real problem:
 | Works across multiple platforms | ❌ | ✅ |
 | Runs locally — no data sent to cloud | ❌ | ✅ |
 
-Walmart and Amazon show you **raw data**. This app gives you **actionable intelligence.**
+---
+
+## 🤖 How the AI Works — RAG Explained
+
+This app uses **RAG (Retrieval Augmented Generation)** — one of the most important techniques in modern AI applications.
+
+### The Problem with Regular AI
+
+If you just ask an AI "what do customers complain about this product?" — it **guesses** based on its training data. The answer might be wrong, outdated, or completely made up (called "hallucination").
+
+### How RAG Fixes This
+
+RAG gives the AI **real data to read** before answering:
+
+```
+STEP 1 — RETRIEVE
+User clicks "Generate Complaints"
+        ↓
+ChromaDB searches for the 15 most relevant reviews
+about "problems issues broken disappointed"
+using semantic search (meaning-based, not keyword-based)
+        ↓
+Returns 15 real customer reviews
+
+STEP 2 — AUGMENT
+Those 15 real reviews are injected into the prompt:
+
+"Here are 15 real customer reviews:
+ - Box arrived completely crushed
+ - Smell is way too strong for sensitive skin
+ - Works great but way overpriced
+ Now list the top 5 complaints..."
+
+STEP 3 — GENERATE
+Mistral 7B reads the ACTUAL reviews
+and generates insights based on what
+customers REALLY said — not guesses
+```
+
+### Side By Side Example
+
+| | Without RAG | With RAG (This App) |
+|--|-------------|-------------------|
+| Source | AI training data (old) | Real customer reviews (current) |
+| Answer | "Customers typically report skin reactions..." | "1. Packaging — boxes arrive crushed during shipping" |
+| Accuracy | Guesses | Based on real facts |
+| Specific to product | ❌ Generic | ✅ Product-specific |
+| Hallucination risk | High | Very low |
+
+### Why This Matters
+
+> The AI in this app never guesses. Every insight it generates is backed by actual customer reviews retrieved from ChromaDB. This is what makes the insights specific, accurate, and trustworthy.
+
+---
+
+## 🔍 How Semantic Search Works
+
+When a user clicks "Generate Complaints" the app doesn't just search for the word "complaint." It uses **semantic search** — searching by meaning.
+
+```
+Search query: "problem issue broken disappointed negative"
+        ↓
+SentenceTransformers converts to 384 numbers:
+[0.12, -0.34, 0.91, 0.05, ...]
+        ↓
+ChromaDB finds reviews whose numbers are closest
+        ↓
+Finds reviews like:
+✅ "Box arrived completely crushed"       ← didn't use the word "problem"
+✅ "Stopped working after 2 days"         ← didn't use the word "issue"
+✅ "Completely let down by this product"  ← didn't use the word "disappointed"
+```
+
+Keyword search would miss all three of those. Semantic search finds them all.
+
+---
+
+## ⚡ What FastAPI Does
+
+FastAPI is the **middle layer** between your Streamlit UI and your AI pipeline — like a waiter between a customer and the kitchen.
+
+```
+Streamlit UI (customer)
+      ↓ sends request
+FastAPI Backend (waiter)
+      ↓ coordinates everything
+Scrapers + ChromaDB + Ollama (kitchen)
+      ↓ sends result back
+FastAPI Backend (waiter)
+      ↓ returns response
+Streamlit UI (customer sees result)
+```
+
+**Your 3 FastAPI endpoints:**
+
+| Endpoint | What It Does |
+|----------|-------------|
+| `POST /api/reviews/scrape` | Detects platform → scrapes reviews → stores in ChromaDB → returns product info + image |
+| `POST /api/insights/generate` | Searches ChromaDB → builds RAG prompt → calls Ollama → returns AI insight |
+| `GET /api/reviews/status` | Checks if reviews are loaded in ChromaDB |
+
+Test all endpoints visually at: `http://localhost:8000/docs`
 
 ---
 
@@ -96,7 +187,21 @@ Paste any product URL from a supported marketplace and instantly get:
 - 🤖 AI-powered insights from real customer reviews
 
 ```
-User pastes URL → Product image fetched → Live reviews fetched → AI analyzes → Insights displayed
+User pastes URL
+      ↓
+Product image + info fetched
+      ↓
+Live reviews fetched from marketplace
+      ↓
+Reviews embedded → stored in ChromaDB
+      ↓
+User clicks insight tab
+      ↓
+ChromaDB retrieves relevant reviews (RAG)
+      ↓
+Mistral reads reviews → generates insight
+      ↓
+Result displayed in dashboard
 ```
 
 ### Insight Types
@@ -156,7 +261,7 @@ https://www.etsy.com/listing/1797455914/gold-plated-enamel-sakura-flower
 
 ---
 
-## 🏗️ How It Works (Architecture)
+## 🏗️ Architecture
 
 ```
 User (Browser — http://localhost:8501)
@@ -174,38 +279,39 @@ User (Browser — http://localhost:8501)
     │   localhost:8000     │
     └──────────┬──────────┘
                │
-       ┌───────┴────────────────────┐
-       ▼                            ▼
-  detector.py                Platform Scrapers
-  (detect URL platform)      walmart.py
-                             amazon.py
-                             etsy.py
-                                  │
-                                  ▼
-                    Real-Time Product Search API
-                    (reviews + product image + price)
-                                  │
-                                  ▼
-                        embeddings.py
-                    (SentenceTransformers)
-                    Text → 384-dim vectors
-                                  │
-                                  ▼
-                        vector_store.py
-                        (ChromaDB on disk)
-                         Semantic Search
-                                  │
-                                  ▼
-                             llm.py
-                        RAG prompt builder
-                                  │
-                                  ▼
-                    Ollama — Mistral 7B
-                      localhost:11434
-                      (local AI — no internet)
-                                  │
-                                  ▼
-               AI Insights + Product Image → Dashboard
+       ┌───────┴──────────────┐
+       ▼                      ▼
+  detector.py           Platform Scrapers
+  (detect platform)     walmart.py
+                        amazon.py
+                        etsy.py
+                             │
+                             ▼
+               Real-Time Product Search API
+               (reviews + product image + price)
+                             │
+                             ▼
+                   embeddings.py
+               (SentenceTransformers)
+               Text → 384-dim vectors
+                             │
+                             ▼
+                   vector_store.py
+                   (ChromaDB on disk)
+                    Semantic Search
+                             │
+                             ▼
+                        llm.py
+                   RAG prompt builder
+                   (injects real reviews)
+                             │
+                             ▼
+               Ollama — Mistral 7B
+                 localhost:11434
+                 (local AI — no internet)
+                             │
+                             ▼
+          AI Insights + Product Image → Dashboard
 ```
 
 ---
@@ -216,15 +322,16 @@ User (Browser — http://localhost:8501)
 |----------|------|---------|
 | Language | Python 3.11 | Core language |
 | UI | Streamlit | Web dashboard with product images |
-| Backend | FastAPI + Uvicorn | REST API |
-| LLM | Ollama (Mistral 7B) | Local AI inference — no cloud needed |
-| Embeddings | SentenceTransformers (all-MiniLM-L6-v2) | Text → 384-dim vectors |
-| Vector DB | ChromaDB | Semantic search + persistent storage |
-| HTTP client | httpx | API calls |
+| Backend | FastAPI + Uvicorn | REST API — middle layer between UI and AI |
+| LLM | Ollama (Mistral 7B) | Local AI inference — no cloud, no cost, no data sharing |
+| Embeddings | SentenceTransformers (all-MiniLM-L6-v2) | Converts text to 384-dim meaning vectors |
+| Vector DB | ChromaDB | Stores embeddings + enables semantic search |
+| RAG | ChromaDB + Ollama | Retrieves real reviews → feeds to AI for accurate insights |
+| HTTP client | httpx | API calls to RapidAPI |
 | Package Manager | UV | Fast Python dependency management |
 | Review API | Real-Time Product Search (RapidAPI) | Live reviews + product images for Walmart, Amazon, Etsy |
 
-> **100% free and open source. Runs entirely on your local machine.**
+> **100% free and open source. Runs entirely on your local machine. No data sent to cloud.**
 
 ---
 
@@ -300,14 +407,12 @@ ollama pull mistral
 
 1. Sign up free at **https://rapidapi.com**
 2. Search for **"Real-Time Product Search"**
-3. Subscribe to the **BASIC ($0.00/month)** plan — 100 requests/month free
+3. Subscribe to the **BASIC ($0.00/month)** plan
 4. Copy your API key
 
 ---
 
 ### 7. Create Your `.env` File
-
-Create a file called `.env` in the project root:
 
 ```
 RAPIDAPI_KEY=your_rapidapi_key_here
@@ -336,25 +441,21 @@ uvicorn backend.main:app --reload --port 8000
 streamlit run app.py
 ```
 
-> **Note:** Ollama starts automatically on Windows. No need to run it manually.
+> **Note:** Ollama starts automatically on Windows.
 
-Open your browser at:
-```
-http://localhost:8501
-```
+Open browser at: `http://localhost:8501`
 
 ---
 
 ## 📖 How to Use
 
-1. Open `http://localhost:8501` in your browser
-2. Paste any supported product URL in the input box
-3. Adjust the review count using the sidebar slider (20–200)
+1. Open `http://localhost:8501`
+2. Paste any supported product URL
+3. Adjust review count using the sidebar slider (20–200)
 4. Click **"🚀 Fetch & Analyze Reviews"**
 5. See the **product image, name, price** displayed automatically
-6. Wait ~30-60 seconds for reviews to be fetched and processed
-7. Click any insight tab and hit **"Generate"**
-8. Use **Step 3: Ask Your Own Question** for custom queries
+6. Click any insight tab → hit **"Generate"**
+7. Use **Step 3** to ask your own questions
 
 ---
 
@@ -362,33 +463,28 @@ http://localhost:8501
 
 ```
 review-intelligence-v2/
-├── app.py                    ← Streamlit UI (main entry point)
+├── app.py                    ← Streamlit UI
 ├── pyproject.toml            ← UV dependencies
 ├── .env                      ← API keys (not committed)
 ├── .gitignore
 ├── README.md
-├── IMPLEMENTATION_GUIDE_V2.md
-├── RUN_GUIDE_V2.md
 │
 ├── backend/
-│   ├── __init__.py
-│   └── main.py               ← FastAPI backend (all routes)
+│   └── main.py               ← FastAPI backend
 │
 ├── scrapers/
-│   ├── __init__.py
 │   ├── detector.py           ← Detects platform from URL
 │   ├── walmart.py            ← Walmart scraper ✅
 │   ├── etsy.py               ← Etsy scraper ✅
 │   └── amazon.py             ← Amazon scraper ✅
 │
 ├── services/
-│   ├── __init__.py
 │   ├── embeddings.py         ← SentenceTransformers
 │   ├── vector_store.py       ← ChromaDB store + search
 │   └── llm.py                ← Ollama + RAG prompts
 │
 └── data/
-    └── chroma_db/            ← Auto-created vector database
+    └── chroma_db/            ← Vector database (auto-created)
 ```
 
 ---
@@ -399,8 +495,8 @@ review-intelligence-v2/
 |--------|----------|-------------|
 | GET | `/health` | Check API is running |
 | GET | `/docs` | Swagger UI — test all endpoints |
-| POST | `/api/reviews/scrape` | Fetch live reviews + product info from URL |
-| POST | `/api/insights/generate` | Generate AI insight |
+| POST | `/api/reviews/scrape` | Fetch live reviews + product info |
+| POST | `/api/insights/generate` | Generate AI insight using RAG |
 | GET | `/api/reviews/status` | Check if reviews are loaded |
 
 ---
@@ -410,41 +506,34 @@ review-intelligence-v2/
 - Ollama must be installed locally (auto-starts on Windows)
 - First load takes 60-90 seconds to embed all reviews
 - Free RapidAPI tier has 100 requests/month limit
-- Products need written reviews (not just star ratings) for best results
-- AI insights are based on fetched reviews — quality depends on review count
+- Products need written reviews (not just star ratings)
+- AI insights quality depends on review count and quality
 
 ---
 
 ## 🗺️ Version History
 
 ### Version 1 (Capstone Submission ✅)
-Built during the Per Scholas CAP 942 capstone:
 - Amazon Fine Food Reviews CSV dataset
-- SentenceTransformers embeddings
-- ChromaDB vector store
-- Ollama + Mistral RAG pipeline
-- All 5 insight tabs working
-- Custom Q&A
+- SentenceTransformers + ChromaDB + Ollama
+- All 5 insight tabs + Custom Q&A
 
 ### Version 2 (Current ✅)
-Post-capstone development:
-- ✅ Live review scraping — Walmart, Amazon, Etsy
-- ✅ Product image display
-- ✅ Product name, price, store info
+- ✅ Live scraping — Walmart, Amazon, Etsy
+- ✅ Product image + name + price display
 - ✅ FastAPI backend
-- ✅ URL-based input instead of CSV upload
 - ✅ Single API for all 3 platforms
+- ✅ RAG pipeline with semantic search
 
 ---
 
 ## 🔜 Planned Features (Version 3)
 
 - [ ] eBay scraper
-- [ ] Side-by-side competitor product comparison
-- [ ] Export insights to PDF report
-- [ ] Sentiment trend chart over time
-- [ ] Support multiple products simultaneously
-- [ ] Cloud deployment (Render / Railway)
+- [ ] Competitor product comparison
+- [ ] Export insights to PDF
+- [ ] Sentiment trend chart
+- [ ] Cloud deployment
 
 ---
 
@@ -455,12 +544,12 @@ Post-capstone development:
 - [SentenceTransformers](https://www.sbert.net) — embedding model
 - [Streamlit](https://streamlit.io) — UI framework
 - [FastAPI](https://fastapi.tiangolo.com) — backend framework
-- [RapidAPI — Real-Time Product Search](https://rapidapi.com) — live review data + product images
+- [RapidAPI — Real-Time Product Search](https://rapidapi.com) — live review data
 
 ---
 
 ## 📄 License
 
-This project was built as a capstone project for Per Scholas CAP 942 — AI Application Development.
+Built as a capstone project for Per Scholas CAP 942 — AI Application Development.
 
 > *This application uses third-party APIs to retrieve publicly available product review data. Walmart, Amazon, and Etsy are trademarks of their respective owners. This application is not affiliated with or endorsed by any of these companies.*
