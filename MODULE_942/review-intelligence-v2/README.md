@@ -228,7 +228,7 @@ Result displayed in dashboard
 
 ---
 
-## 🧪 Try These URLs Right Now
+## 🧪 URL's to try
 
 Copy and paste any of these into the app to test immediately:
 
